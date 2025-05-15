@@ -1,71 +1,9 @@
 use leptos::prelude::*;
 
-struct FooterLink {
-    text: &'static str,
-    href: &'static str,
-}
-
-struct FooterSection {
-    title: &'static str,
-    links: &'static [FooterLink],
-}
-
-const FOOTER_LINKS: &[FooterSection] = &[
-    FooterSection {
-        title: "Project",
-        links: &[
-            FooterLink {
-                text: "Blog",
-                href: "https://x.com/untronfi",
-            },
-            FooterLink {
-                text: "About us",
-                href: "https://x.com/untronfi",
-            },
-            FooterLink {
-                text: "Terms of service",
-                href: "https://www.wtfpl.net/wp-content/uploads/2012/12/freedom.jpeg",
-            },
-            FooterLink {
-                text: "Brand assets",
-                href: "https://github.com/ultrasoundlabs/brandkit",
-            },
-        ],
-    },
-    FooterSection {
-        title: "Socials",
-        links: &[
-            FooterLink {
-                text: "X / Twitter",
-                href: "https://x.com/untronfi",
-            },
-            FooterLink {
-                text: "Telegram",
-                href: "https://t.me/untronchat",
-            },
-            FooterLink {
-                text: "GitHub",
-                href: "https://github.com/ultrasoundlabs",
-            },
-        ],
-    },
-    FooterSection {
-        title: "Contacts",
-        links: &[
-            FooterLink {
-                text: "SHPS (LLC) Ultrasound Labs",
-                href: "mailto:contact@untron.finance",
-            },
-            FooterLink {
-                text: "contact@untron.finance",
-                href: "mailto:contact@untron.finance",
-            },
-        ],
-    },
-];
+use crate::config::footer::FooterSection;
 
 #[component]
-pub fn Footer() -> impl IntoView {
+pub fn Footer(footer_links: &'static [FooterSection]) -> impl IntoView {
     view! {
         <footer class="py-12">
             <div class="w-full max-w-[1200px] mx-auto px-4">
@@ -80,7 +18,7 @@ pub fn Footer() -> impl IntoView {
                         />
                     </div>
                     <div class="flex-1 flex flex-wrap">
-                        {FOOTER_LINKS
+                        {footer_links
                             .iter()
                             .enumerate()
                             .map(|(index, section)| {

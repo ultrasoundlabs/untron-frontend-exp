@@ -5,7 +5,11 @@ use std::rc::Rc;
 use wasm_bindgen_futures::spawn_local;
 
 // Local imports
-use crate::components::{currency_input::CurrencyInput, footer::Footer, header::Header};
+use crate::components::{
+    currency_input::CurrencyInput, footer::Footer, header::Header, FaqAccordion,
+};
+use crate::config::faq_accordion::DEFAULT_FAQ_ITEMS;
+use crate::config::footer::FOOTER_LINKS;
 use crate::utils::units::*;
 
 // ---------------- Constants ----------------
@@ -308,46 +312,11 @@ pub fn Home() -> impl IntoView {
 
                 <div class="w-full max-w-[1200px] mt-8 mb-[80px]">
                     <h2 class="text-[32px] font-medium text-center mb-4">"FAQ"</h2>
-                    <div class="space-y-4">
-                        // simple accordion replacement using <details>
-                        {
-                            let faqs = vec![
-                                (
-                                    "What\'s USDT?",
-                                    "USDT is a stable-valued crypto-asset pegged to the US dollar.",
-                                ),
-                                ("What's Tron?", "Tron is a high-throughput blockchain network."),
-                                ("What's Ethereum?", "Ethereum is a programmable blockchain."),
-                                (
-                                    "What's Untron?",
-                                    "Untron facilitates USDT transfers between chains.",
-                                ),
-                                (
-                                    "How to send USDT from Tron?",
-                                    "Use the form above and follow the on-screen instructions.",
-                                ),
-                                (
-                                    "What about into Tron?",
-                                    "An inbound transfer flow is in development.",
-                                ),
-                                ("How can I help?", "Join our community and spread the word!"),
-                            ];
-                            faqs.into_iter()
-                                .map(|(q, a)| {
-                                    view! {
-                                        <details class="bg-white rounded-lg p-4 cursor-pointer">
-                                            <summary class="font-medium">{q}</summary>
-                                            <p class="mt-2 text-sm text-[#4b4b4b]">{a}</p>
-                                        </details>
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                        }
-                    </div>
+                    <FaqAccordion items=DEFAULT_FAQ_ITEMS />
                 </div>
             </main>
 
-            <Footer />
+            <Footer footer_links=FOOTER_LINKS />
         </div>
     }
 }
