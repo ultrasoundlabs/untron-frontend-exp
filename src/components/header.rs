@@ -7,7 +7,7 @@ pub fn Header() -> impl IntoView {
             <div class="flex items-center space-x-8">
                 <a href="/" class="flex items-center">
                     <img
-                        src="/logos/shortLogo.svg"
+                        src="/public/logos/shortLogo.svg"
                         alt="Untron Logo"
                         width="58"
                         height="58"
@@ -45,11 +45,13 @@ pub fn Header() -> impl IntoView {
     }
 }
 
+// TODO: add theme toggle
 #[component]
 fn ThemeToggle() -> impl IntoView {
     view! { <div /> }
 }
 
+// TODO: add connect button
 #[component]
 fn ConnectButton() -> impl IntoView {
     view! { <button class="btn">"Connect"</button> }
