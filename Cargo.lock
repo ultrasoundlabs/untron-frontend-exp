@@ -1686,6 +1686,8 @@ dependencies = [
  "leptos_icons",
  "leptos_meta",
  "leptos_router",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
