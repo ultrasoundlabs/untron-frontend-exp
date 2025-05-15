@@ -28,7 +28,7 @@ pub fn CurrencyInput(
     /// Maximum liquidity in units (scaled by `SCALING_FACTOR`). Accepts a signal
     /// so the component reacts when the value changes.
     #[prop(into)]
-    max_units: MaybeSignal<u64>,
+    max_units: Signal<u64>,
     /// Whether this input represents the receive side
     #[prop(optional, default = false)]
     is_receive: bool,
@@ -178,19 +178,18 @@ pub fn CurrencyInput(
                         {currency}
                     </p>
                 </div>
-                {move || {
-                    if show_max_output && show_max_warning.get() {
-                        if max_units.get() > 0 {
-                            let msg = format!(
-                                "Maximum output is {} USDT",
-                                units_to_string(max_units.get()),
-                            );
-                            return view! { <div class="text-xs text-red-500 mt-1">{msg}</div> }
-                                .into_any();
-                        }
+                <Show
+                    when=move || show_max_output && show_max_warning.get() && (max_units.get() > 0)
+                    fallback=|| view! { <div></div> }
+                >
+                    {
+                        let msg = format!(
+                            "Maximum output is {} USDT",
+                            units_to_string(max_units.get()),
+                        );
+                        view! { <div class="text-xs text-red-500 mt-1">{msg}</div> }
                     }
-                    view! { <div></div> }.into_any()
-                }}
+                </Show>
             </div>
             <div class="flex items-center justify-center pt-[40px] pb-[32px]">
                 <img

@@ -271,7 +271,9 @@ pub fn Home() -> impl IntoView {
                                 || is_swapping.get()
                         }
                     >
-                        {move || if is_swapping.get() { "Processing…" } else { "Untron!" }}
+                        <Show when=move || is_swapping.get() fallback=|| view! { "Untron!" }>
+                            {"Processing…"}
+                        </Show>
                     </button>
 
                     {move || {
@@ -291,16 +293,16 @@ pub fn Home() -> impl IntoView {
                         "I only have a Tron wallet"
                     </p>
                 </div>
-
                 // ------------- Arrow & FAQ -----------------------
                 <div class="flex justify-center pt-[72px] pb-[104px]">
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
-                        fill="currentColor"
+                        fill="none"
+                        stroke="currentColor"
                         viewBox="0 0 24 24"
                         class="w-14 h-14 text-black"
                     >
-                        <path d="M12 16l-6-6h12z" />
+                        <path d="M6 10l6 6l6-6" />
                     </svg>
                 </div>
 
