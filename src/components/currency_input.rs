@@ -4,87 +4,7 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
 
-/// Number of decimal places used for the on-chain units. Equivalent to `DEFAULT_DECIMALS` in TS.
-const DEFAULT_DECIMALS: u32 = 6;
-
-/// Separate constant for rate scaling (matches JS RATE_SCALE).
-const RATE_SCALE: u64 = 1_000_000; // 10^6
-
-// ---- Helper functions -----------------------------------------------------
-
-/// Converts a human-readable decimal string into integer units (no floating-point math).
-fn string_to_units(value: &str) -> Option<u64> {
-    // Split on the optional decimal point.
-    let mut parts = value.split('.');
-    let whole = parts.next().unwrap_or("");
-    let frac = parts.next().unwrap_or("");
-
-    // Reject multiple decimals.
-    if parts.next().is_some() {
-        return None;
-    }
-
-    // Reject more fractional digits than supported.
-    if frac.len() > DEFAULT_DECIMALS as usize {
-        return None;
-    }
-
-    // Build a string representing the integer value scaled by `SCALING_FACTOR`.
-    // Pad fractional part on the right with zeros.
-    let mut scaled = String::with_capacity(whole.len() + DEFAULT_DECIMALS as usize);
-    scaled.push_str(whole.trim_start_matches('0'));
-    let padding = DEFAULT_DECIMALS as usize - frac.len();
-    scaled.push_str(frac);
-    scaled.extend(std::iter::repeat('0').take(padding));
-
-    // Empty string after trimming => value was 0.
-    let scaled = if scaled.is_empty() { "0" } else { &scaled };
-
-    scaled.parse::<u64>().ok()
-}
-
-/// Converts integer units into a human-readable decimal string.
-fn units_to_string(units: u64) -> String {
-    let mut s = units.to_string();
-    if DEFAULT_DECIMALS == 0 {
-        return s;
-    }
-
-    // Ensure the string has at least DEFAULT_DECIMALS + 1 digits so we can insert the dot.
-    if s.len() <= DEFAULT_DECIMALS as usize {
-        let prepend = DEFAULT_DECIMALS as usize + 1 - s.len();
-        s = "0".repeat(prepend) + &s;
-    }
-
-    let idx = s.len() - DEFAULT_DECIMALS as usize;
-    let (whole, frac) = s.split_at(idx);
-
-    // Trim trailing zeros from fractional part.
-    let frac = frac.trim_end_matches('0');
-    if frac.is_empty() {
-        whole.to_string()
-    } else {
-        format!("{whole}.{frac}")
-    }
-}
-
-/// Calculates the amount of input (send) units required to receive the given `receive_units`.
-fn convert_receive_to_send(receive_units: u64, swap_rate_units: u64) -> u64 {
-    // (receiveUnits * RATE_SCALE + swapRate/2) / swapRate  — rounded to nearest
-    receive_units
-        .saturating_mul(RATE_SCALE)
-        .saturating_add(swap_rate_units / 2)
-        / swap_rate_units
-}
-
-/// Calculates the amount of output (receive) units obtained from the given `send_units`.
-fn convert_send_to_receive(send_units: u64, swap_rate_units: u64) -> u64 {
-    // (sendUnits * swapRate + RATE_SCALE/2) / RATE_SCALE  — rounded to nearest
-    send_units
-        .saturating_mul(swap_rate_units)
-        .saturating_add(RATE_SCALE / 2)
-        / RATE_SCALE
-}
+use crate::utils::units::*;
 
 // ---- Component ------------------------------------------------------------
 
@@ -105,8 +25,10 @@ pub fn CurrencyInput(
     /// Optional callback invoked when the value changes (send side for receive inputs and vice-versa)
     #[prop(optional)]
     on_change: Option<Rc<dyn Fn(String)>>,
-    /// Maximum liquidity in units (scaled by `SCALING_FACTOR`)
-    max_units: u64,
+    /// Maximum liquidity in units (scaled by `SCALING_FACTOR`). Accepts a signal
+    /// so the component reacts when the value changes.
+    #[prop(into)]
+    max_units: MaybeSignal<u64>,
     /// Whether this input represents the receive side
     #[prop(optional, default = false)]
     is_receive: bool,
@@ -171,12 +93,12 @@ pub fn CurrencyInput(
                     let send_units = convert_receive_to_send(new_units, rate);
                     let send_value = units_to_string(send_units);
 
-                    let exceeds = exceeds_max(new_units, max_units);
+                    let exceeds = exceeds_max(new_units, max_units.get());
                     show_max_warning.set(exceeds);
                     if exceeds {
                         // Clamp to max and exit.
-                        let max_receive_display = units_to_string(max_units);
-                        let max_input_units = convert_receive_to_send(max_units, rate);
+                        let max_receive_display = units_to_string(max_units.get());
+                        let max_input_units = convert_receive_to_send(max_units.get(), rate);
                         let max_input_display = units_to_string(max_input_units);
                         input_value.set(max_receive_display.clone());
                         if let Some(cb) = &on_change {
@@ -195,10 +117,10 @@ pub fn CurrencyInput(
 
                 // Fallback validation when we cannot compute send value.
                 if !new_value.is_empty() {
-                    let exceeds = exceeds_max(new_units, max_units);
+                    let exceeds = exceeds_max(new_units, max_units.get());
                     show_max_warning.set(exceeds);
                     if exceeds {
-                        let max_receive_display = units_to_string(max_units);
+                        let max_receive_display = units_to_string(max_units.get());
                         input_value.set(max_receive_display.clone());
                         if let Some(cb) = &on_change {
                             cb(max_receive_display);
@@ -211,10 +133,10 @@ pub fn CurrencyInput(
                 // SEND input branch -----------------------------------------
                 if let (Some(rate), true) = (swap_rate_units, !new_value.is_empty()) {
                     let output_units = convert_send_to_receive(new_units, rate);
-                    let exceeds = exceeds_max(output_units, max_units);
+                    let exceeds = exceeds_max(output_units, max_units.get());
                     show_max_warning.set(exceeds);
                     if exceeds {
-                        let max_input_units = convert_receive_to_send(max_units, rate);
+                        let max_input_units = convert_receive_to_send(max_units.get(), rate);
                         let max_input_display = units_to_string(max_input_units);
                         input_value.set(max_input_display.clone());
                         if let Some(cb) = &on_change {
@@ -258,10 +180,10 @@ pub fn CurrencyInput(
                 </div>
                 {move || {
                     if show_max_output && show_max_warning.get() {
-                        if max_units > 0 {
+                        if max_units.get() > 0 {
                             let msg = format!(
                                 "Maximum output is {} USDT",
-                                units_to_string(max_units),
+                                units_to_string(max_units.get()),
                             );
                             return view! { <div class="text-xs text-red-500 mt-1">{msg}</div> }
                                 .into_any();

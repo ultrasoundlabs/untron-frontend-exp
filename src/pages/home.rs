@@ -6,16 +6,11 @@ use wasm_bindgen_futures::spawn_local;
 
 // Local imports
 use crate::components::{currency_input::CurrencyInput, footer::Footer, header::Header};
+use crate::utils::units::*;
 
 // ---------------- Constants ----------------
 /// Base URL for backend API.
 const API_BASE_URL: &str = "https://untron.finance/api/v2-public";
-/// Rate scale (matches the TS RATE_SCALE = 1_000_000).
-const RATE_SCALE: u64 = 1_000_000;
-/// Current swap rate (scaled by RATE_SCALE). NOTE: keep in sync with backend.
-const SWAP_RATE_UNITS: u64 = 999_700; // 0.03% fee
-/// Number of on-chain decimals (same as DEFAULT_DECIMALS in TS).
-const DEFAULT_DECIMALS: u32 = 6;
 
 // ------------ Helper structs ---------------
 #[derive(Deserialize)]
@@ -34,48 +29,6 @@ fn is_valid_evm_address(addr: &str) -> bool {
     addr.len() == 42
         && addr.starts_with("0x")
         && addr.chars().skip(2).all(|c| c.is_ascii_hexdigit())
-}
-
-fn string_to_units(value: &str) -> Option<u64> {
-    let mut parts = value.split('.');
-    let whole = parts.next().unwrap_or("");
-    let frac = parts.next().unwrap_or("");
-    if parts.next().is_some() || frac.len() > DEFAULT_DECIMALS as usize {
-        return None;
-    }
-    let mut scaled = String::with_capacity(whole.len() + DEFAULT_DECIMALS as usize);
-    scaled.push_str(whole.trim_start_matches('0'));
-    let padding = DEFAULT_DECIMALS as usize - frac.len();
-    scaled.push_str(frac);
-    scaled.extend(std::iter::repeat('0').take(padding));
-    let scaled = if scaled.is_empty() { "0" } else { &scaled };
-    scaled.parse::<u64>().ok()
-}
-
-fn units_to_string(units: u64) -> String {
-    let mut s = units.to_string();
-    if DEFAULT_DECIMALS == 0 {
-        return s;
-    }
-    if s.len() <= DEFAULT_DECIMALS as usize {
-        let prepend = DEFAULT_DECIMALS as usize + 1 - s.len();
-        s = "0".repeat(prepend) + &s;
-    }
-    let idx = s.len() - DEFAULT_DECIMALS as usize;
-    let (whole, frac) = s.split_at(idx);
-    let frac = frac.trim_end_matches('0');
-    if frac.is_empty() {
-        whole.to_owned()
-    } else {
-        format!("{whole}.{frac}")
-    }
-}
-
-fn convert_send_to_receive(send_units: u64, swap_rate_units: u64) -> u64 {
-    send_units
-        .saturating_mul(swap_rate_units)
-        .saturating_add(RATE_SCALE / 2)
-        / RATE_SCALE
 }
 
 #[component]
@@ -281,7 +234,7 @@ pub fn Home() -> impl IntoView {
                         currency_name="USDT Tron"
                         // Propagate changes from receive -> send when editing the other input
                         on_change=Rc::new(move |val| send_amount.set(val))
-                        max_units=max_order_output.get()
+                        max_units=max_order_output.read_only()
                         swap_rate_units=SWAP_RATE_UNITS
                     />
 
@@ -292,7 +245,7 @@ pub fn Home() -> impl IntoView {
                         currency_name="USDT ARB"
                         is_receive=true
                         on_change=Rc::new(move |val| send_amount.set(val))
-                        max_units=max_order_output.get()
+                        max_units=max_order_output.read_only()
                         swap_rate_units=SWAP_RATE_UNITS
                         show_max_output=true
                     />
