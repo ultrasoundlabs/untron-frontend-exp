@@ -1,18 +1,19 @@
+use leptos::ev::Event;
 use leptos::prelude::*;
 use std::rc::Rc;
-use leptos::ev::Event;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
 
 /// Number of decimal places used for the on-chain units. Equivalent to `DEFAULT_DECIMALS` in TS.
 const DEFAULT_DECIMALS: u32 = 6;
-/// Scaling factor that converts a displayed amount into on-chain units.
-const SCALING_FACTOR: u128 = 10u128.pow(DEFAULT_DECIMALS);
+
+/// Separate constant for rate scaling (matches JS RATE_SCALE).
+const RATE_SCALE: u64 = 1_000_000; // 10^6
 
 // ---- Helper functions -----------------------------------------------------
 
 /// Converts a human-readable decimal string into integer units (no floating-point math).
-fn string_to_units(value: &str) -> Option<u128> {
+fn string_to_units(value: &str) -> Option<u64> {
     // Split on the optional decimal point.
     let mut parts = value.split('.');
     let whole = parts.next().unwrap_or("");
@@ -39,11 +40,11 @@ fn string_to_units(value: &str) -> Option<u128> {
     // Empty string after trimming => value was 0.
     let scaled = if scaled.is_empty() { "0" } else { &scaled };
 
-    scaled.parse::<u128>().ok()
+    scaled.parse::<u64>().ok()
 }
 
 /// Converts integer units into a human-readable decimal string.
-fn units_to_string(units: u128) -> String {
+fn units_to_string(units: u64) -> String {
     let mut s = units.to_string();
     if DEFAULT_DECIMALS == 0 {
         return s;
@@ -68,15 +69,21 @@ fn units_to_string(units: u128) -> String {
 }
 
 /// Calculates the amount of input (send) units required to receive the given `receive_units`.
-fn convert_receive_to_send(receive_units: u128, swap_rate_units: u128) -> u128 {
-    // send = receive * SCALING_FACTOR / rate
-    receive_units.saturating_mul(SCALING_FACTOR) / swap_rate_units
+fn convert_receive_to_send(receive_units: u64, swap_rate_units: u64) -> u64 {
+    // (receiveUnits * RATE_SCALE + swapRate/2) / swapRate  — rounded to nearest
+    receive_units
+        .saturating_mul(RATE_SCALE)
+        .saturating_add(swap_rate_units / 2)
+        / swap_rate_units
 }
 
 /// Calculates the amount of output (receive) units obtained from the given `send_units`.
-fn convert_send_to_receive(send_units: u128, swap_rate_units: u128) -> u128 {
-    // receive = send * rate / SCALING_FACTOR
-    send_units.saturating_mul(swap_rate_units) / SCALING_FACTOR
+fn convert_send_to_receive(send_units: u64, swap_rate_units: u64) -> u64 {
+    // (sendUnits * swapRate + RATE_SCALE/2) / RATE_SCALE  — rounded to nearest
+    send_units
+        .saturating_mul(swap_rate_units)
+        .saturating_add(RATE_SCALE / 2)
+        / RATE_SCALE
 }
 
 // ---- Component ------------------------------------------------------------
@@ -86,32 +93,36 @@ pub fn CurrencyInput(
     /// Label shown above the input (e.g. "You send")
     label: &'static str,
     /// Currency ticker (e.g. "USDT")
-    #[prop(optional, default = "")] currency: &'static str,
+    #[prop(optional, default = "")]
+    currency: &'static str,
     /// Path to an icon asset
     currency_icon: &'static str,
     /// Optional human-readable currency name (e.g. "USDT Tron")
-    #[prop(optional)] currency_name: Option<&'static str>,
+    currency_name: &'static str,
     /// Controlled value coming from the parent
-    #[prop(into)] value: RwSignal<String>,
+    #[prop(into)]
+    value: RwSignal<String>,
     /// Optional callback invoked when the value changes (send side for receive inputs and vice-versa)
-    #[prop(optional)] on_change: Option<Rc<dyn Fn(String)>>,
+    #[prop(optional)]
+    on_change: Option<Rc<dyn Fn(String)>>,
     /// Maximum liquidity in units (scaled by `SCALING_FACTOR`)
-    #[prop(optional)] max_units: Option<u128>,
+    max_units: u64,
     /// Whether this input represents the receive side
-    #[prop(optional, default = false)] is_receive: bool,
+    #[prop(optional, default = false)]
+    is_receive: bool,
     /// Current swap rate (scaled by `SCALING_FACTOR`)
-    #[prop(optional)] swap_rate_units: Option<u128>,
+    #[prop(optional)]
+    swap_rate_units: Option<u64>,
     /// Show the "max output" warning banner
-    #[prop(optional, default = false)] show_max_output: bool,
-    /// If true, disables editing and treats the component as read-only.
-    #[prop(optional, default = false)] read_only: bool,
+    #[prop(optional, default = false)]
+    show_max_output: bool,
 ) -> impl IntoView {
     // Internal signals mirror the React `useState` hooks.
-    let input_value = create_rw_signal(value.get_untracked());
-    let show_max_warning = create_rw_signal(false);
+    let input_value = RwSignal::new(value.get_untracked());
+    let show_max_warning = RwSignal::new(false);
 
     // Sync internal value when the external value changes (mimics React useEffect).
-    create_effect(move |_| {
+    Effect::new(move |_| {
         input_value.set(value.get());
     });
 
@@ -122,13 +133,14 @@ pub fn CurrencyInput(
         let value_signal = value.clone();
         let on_change = on_change.clone();
         move |ev: Event| {
-            if read_only {
-                return;
-            }
             // Extract raw string value from the <input /> element.
             let target = ev.target().expect("event should have target");
-            let input_el: HtmlInputElement = target.dyn_into().expect("target should be HtmlInputElement");
-            let mut new_value: String = input_el.value().chars()
+            let input_el: HtmlInputElement = target
+                .dyn_into()
+                .expect("target should be HtmlInputElement");
+            let new_value: String = input_el
+                .value()
+                .chars()
                 .filter(|c| c.is_ascii_digit() || *c == '.')
                 .collect();
 
@@ -149,7 +161,7 @@ pub fn CurrencyInput(
             let new_units = new_units_opt.unwrap();
 
             // Helper closures for common operations.
-            let exceeds_max = |units: u128, max: u128| units > max;
+            let exceeds_max = |units: u64, max: u64| units > max;
 
             // Branches mirror the TS implementation.
             if is_receive {
@@ -159,21 +171,19 @@ pub fn CurrencyInput(
                     let send_units = convert_receive_to_send(new_units, rate);
                     let send_value = units_to_string(send_units);
 
-                    if let Some(max) = max_units {
-                        let exceeds = exceeds_max(new_units, max);
-                        show_max_warning.set(exceeds);
-                        if exceeds {
-                            // Clamp to max and exit.
-                            let max_receive_display = units_to_string(max);
-                            let max_input_units = convert_receive_to_send(max, rate);
-                            let max_input_display = units_to_string(max_input_units);
-                            input_value.set(max_receive_display.clone());
-                            if let Some(cb) = &on_change {
-                                cb(max_input_display);
-                            }
-                            show_max_warning.set(false);
-                            return;
+                    let exceeds = exceeds_max(new_units, max_units);
+                    show_max_warning.set(exceeds);
+                    if exceeds {
+                        // Clamp to max and exit.
+                        let max_receive_display = units_to_string(max_units);
+                        let max_input_units = convert_receive_to_send(max_units, rate);
+                        let max_input_display = units_to_string(max_input_units);
+                        input_value.set(max_receive_display.clone());
+                        if let Some(cb) = &on_change {
+                            cb(max_input_display);
                         }
+                        show_max_warning.set(false);
+                        return;
                     }
 
                     input_value.set(new_value.clone());
@@ -184,11 +194,11 @@ pub fn CurrencyInput(
                 }
 
                 // Fallback validation when we cannot compute send value.
-                if let (Some(max), true) = (max_units, !new_value.is_empty()) {
-                    let exceeds = exceeds_max(new_units, max);
+                if !new_value.is_empty() {
+                    let exceeds = exceeds_max(new_units, max_units);
                     show_max_warning.set(exceeds);
                     if exceeds {
-                        let max_receive_display = units_to_string(max);
+                        let max_receive_display = units_to_string(max_units);
                         input_value.set(max_receive_display.clone());
                         if let Some(cb) = &on_change {
                             cb(max_receive_display);
@@ -199,12 +209,12 @@ pub fn CurrencyInput(
                 }
             } else {
                 // SEND input branch -----------------------------------------
-                if let (Some(max), Some(rate), true) = (max_units, swap_rate_units, !new_value.is_empty()) {
+                if let (Some(rate), true) = (swap_rate_units, !new_value.is_empty()) {
                     let output_units = convert_send_to_receive(new_units, rate);
-                    let exceeds = exceeds_max(output_units, max);
+                    let exceeds = exceeds_max(output_units, max_units);
                     show_max_warning.set(exceeds);
                     if exceeds {
-                        let max_input_units = convert_receive_to_send(max, rate);
+                        let max_input_units = convert_receive_to_send(max_units, rate);
                         let max_input_display = units_to_string(max_input_units);
                         input_value.set(max_input_display.clone());
                         if let Some(cb) = &on_change {
@@ -229,30 +239,32 @@ pub fn CurrencyInput(
     view! {
         <div class="bg-card rounded-[44px] pl-6 pr-[15px] w-full max-w-[560px] flex items-center h-[135px]">
             <div class="flex-1">
-                <label class="text-[18px] font-normal text-foreground mb-0 leading-none block">{label}</label>
+                <label class="text-[18px] font-normal text-foreground mb-0 leading-none block">
+                    {label}
+                </label>
                 <input
                     id=format!("currency-input-{currency}")
                     type="text"
                     inputmode="decimal"
                     prop:value=move || input_value.get()
-                    readonly=read_only
                     on:input=handle_input
                     placeholder="0.0"
                     class="text-[36px] font-semibold outline-none w-full text-foreground p-0 leading-none placeholder:text-muted-foreground"
                 />
                 <div class="flex items-center justify-between">
-                    <p class="text-normal text-muted-foreground mt-[0px] leading-none">{currency}</p>
+                    <p class="text-normal text-muted-foreground mt-[0px] leading-none">
+                        {currency}
+                    </p>
                 </div>
                 {move || {
                     if show_max_output && show_max_warning.get() {
-                        if let Some(max) = max_units {
-                            if max > 0 {
-                                let msg = format!(
-                                    "Maximum output is {} USDT",
-                                    units_to_string(max)
-                                );
-                                return view! { <div class="text-xs text-red-500 mt-1">{msg}</div> }.into_any();
-                            }
+                        if max_units > 0 {
+                            let msg = format!(
+                                "Maximum output is {} USDT",
+                                units_to_string(max_units),
+                            );
+                            return view! { <div class="text-xs text-red-500 mt-1">{msg}</div> }
+                                .into_any();
                         }
                     }
                     view! { <div></div> }.into_any()
@@ -261,7 +273,7 @@ pub fn CurrencyInput(
             <div class="flex items-center justify-center pt-[40px] pb-[32px]">
                 <img
                     src=currency_icon
-                    alt=currency_name.unwrap_or("Currency")
+                    alt=currency_name
                     width="63"
                     height="63"
                     class="w-auto h-auto"
@@ -269,4 +281,4 @@ pub fn CurrencyInput(
             </div>
         </div>
     }
-} 
+}

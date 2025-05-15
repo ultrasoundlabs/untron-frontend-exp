@@ -9,13 +9,23 @@ pub fn Footer() -> impl IntoView {
                 <span class="font-medium">"© 2024 Untron"</span>
             </div>
             <nav class="space-x-4">
-                <a href="https://x.com/alexhooketh/status/1882052401869574527" target="_blank" rel="noopener noreferrer" class="hover:underline">
+                <a
+                    href="https://x.com/alexhooketh/status/1882052401869574527"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="hover:underline"
+                >
                     Untron Yourself
                 </a>
-                <a href="https://t.me/untronchat" target="_blank" rel="noopener noreferrer" class="hover:underline">
+                <a
+                    href="https://t.me/untronchat"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="hover:underline"
+                >
                     Integrate
                 </a>
             </nav>
         </footer>
     }
-} 
+}

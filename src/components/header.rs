@@ -46,7 +46,11 @@ pub fn Header() -> impl IntoView {
 }
 
 #[component]
-fn ThemeToggle() -> impl IntoView { view! { <div/> } }
+fn ThemeToggle() -> impl IntoView {
+    view! { <div /> }
+}
 
 #[component]
-fn ConnectButton() -> impl IntoView { view! { <button class="btn">"Connect"</button> } }
+fn ConnectButton() -> impl IntoView {
+    view! { <button class="btn">"Connect"</button> }
+}
